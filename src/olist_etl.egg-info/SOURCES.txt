@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+src/olist_etl/__init__.py
+src/olist_etl.egg-info/PKG-INFO
+src/olist_etl.egg-info/SOURCES.txt
+src/olist_etl.egg-info/dependency_links.txt
+src/olist_etl.egg-info/requires.txt
+src/olist_etl.egg-info/top_level.txt
