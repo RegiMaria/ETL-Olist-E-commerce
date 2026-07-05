@@ -37,5 +37,14 @@ class Extractor:
 
         # Cada fonte nova exige mais um elif aqui.
         # Isso é a violacao do OCP: a classe nunca fica "fechada".
+        
+        elif source_type == "api":
+            # Simulacao de uma chamada de API (sem rede de verdade).
+            # Precisamos MODIFICAR a classe existente pra chegar ate aqui.
+            dados_fake = {"id": [1, 2], "valor": [100, 200]}
+            return pd.DataFrame(dados_fake)
+
+        # Cada fonte nova exige mais um elif aqui.
+        # Isso e a violacao do OCP: a classe nunca fica "fechada".
         else:
             raise ValueError(f"Tipo de fonte nao suportado: {source_type}")
