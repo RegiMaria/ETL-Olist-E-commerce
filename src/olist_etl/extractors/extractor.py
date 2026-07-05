@@ -25,7 +25,7 @@ class Extractor:
     fonte nova exige editar o metodo extract().
     """
 
-    def extract(self, source_type: str, filepath: str) -> pd.DataFrame:
+    def extract(self, source_type: str, filepath: str = None) -> pd.DataFrame:
         if source_type == "csv":
             return pd.read_csv(filepath)
 
