@@ -48,3 +48,17 @@ class Extractor:
         # Isso e a violacao do OCP: a classe nunca fica "fechada".
         else:
             raise ValueError(f"Tipo de fonte nao suportado: {source_type}")
+
+"""
+Comentário pedagógico:
+
+Mais uma demonstração de fragilidade de design, além do OCP: a assinatura do método extract()
+também tá crescendo de forma estranha, filepath faz sentido pra csv/parquet/json, mas é inútil
+(e opcional) pra api.
+
+Isso é um cheiro de código chamado "parâmetro que não se aplica a todos os casos",
+outro sintoma de que essa classe está tentando fazer coisas demais dentro de um único método,
+e é exatamente o tipo de problema que a versão "depois OCP"
+(com uma interface BaseExtractor e uma classe por fonte)vai resolver: cada Extractor concreto
+só tem os parâmetros que fazem sentido pra ele.
+"""
