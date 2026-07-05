@@ -1,0 +1,64 @@
+"""
+Extractor - versao "antes OCP".
+
+Este modulo respeita o SRP: a classe tem UMA ÚNICA responsabilidade,
+que e extrair dados de uma origem.
+
+Porem, ele viola o OCP (Open/Closed Principle): toda vez que uma nova
+fonte de dados precisar ser suportada (ex: parquet, API, banco de dados),
+sera necessario MODIFICAR o metodo extract() abaixo, adicionando mais um
+bloco elif. Isso torna a classe fechada para extensão e aberta para
+modificacao - exatamente o oposto do que o OCP recomenda.
+
+Compare com a versao "depois OCP" (extractors/base.py + implementacoes
+especificas), onde novas fontes sao adicionadas criando uma classe nova,
+sem tocar em nenhum código existente.
+"""
+
+import pandas as pd
+
+
+class Extractor:
+    """Extrai dados de diferentes origens com base em um tipo informado.
+
+    Respeita o SRP (so faz extracao), mas viola o OCP: adicionar uma
+    fonte nova exige editar o metodo extract().
+    """
+
+    def extract(self, source_type: str, filepath: str = None) -> pd.DataFrame:
+        if source_type == "csv":
+            return pd.read_csv(filepath)
+
+        elif source_type == "parquet":
+            return pd.read_parquet(filepath)
+
+        elif source_type == "json":
+            return pd.read_json(filepath)
+
+        # Cada fonte nova exige mais um elif aqui.
+        # Isso é a violacao do OCP: a classe nunca fica "fechada".
+        
+        elif source_type == "api":
+            # Simulacao de uma chamada de API (sem rede de verdade).
+            # Precisamos MODIFICAR a classe existente pra chegar ate aqui.
+            dados_fake = {"id": [1, 2], "valor": [100, 200]}
+            return pd.DataFrame(dados_fake)
+
+        # Cada fonte nova exige mais um elif aqui.
+        # Isso e a violacao do OCP: a classe nunca fica "fechada".
+        else:
+            raise ValueError(f"Tipo de fonte nao suportado: {source_type}")
+
+"""
+Comentário pedagógico:
+
+Mais uma demonstração de fragilidade de design, além do OCP: a assinatura do método extract()
+também tá crescendo de forma estranha, filepath faz sentido pra csv/parquet/json, mas é inútil
+(e opcional) pra api.
+
+Isso é um cheiro de código chamado "parâmetro que não se aplica a todos os casos",
+outro sintoma de que essa classe está tentando fazer coisas demais dentro de um único método,
+e é exatamente o tipo de problema que a versão "depois OCP"
+(com uma interface BaseExtractor e uma classe por fonte)vai resolver: cada Extractor concreto
+só tem os parâmetros que fazem sentido pra ele.
+"""
