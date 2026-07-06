@@ -11,7 +11,8 @@ class CsvExtractor(BaseExtractor):
     def extract(self) -> pd.DataFrame:
         return pd.read_csv(self.filepath)
 
- # Extrai dados de um arquivo CSV.
+
+# Extrai dados de um arquivo CSV.
 # Unica responsabilidade: extrair de UMA fonte CSV especifica.
 # Se amanha for necessario extrair de outra fonte (parquet, api,
 # banco de dados), basta criar uma nova classe implementando
