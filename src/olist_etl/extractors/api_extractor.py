@@ -18,3 +18,12 @@ class ApiExtractor(BaseExtractor):
     def extract(self) -> pd.DataFrame:
         dados_fake = {"id": [1, 2], "valor": [100, 200]}
         return pd.DataFrame(dados_fake)
+    
+
+# Teste rápido de API
+""" python3 -c "
+from src.olist_etl.extractors.api_extractor import ApiExtractor
+
+extractor = ApiExtractor()
+print(extractor.extract())
+"""
