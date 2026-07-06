@@ -3,3 +3,5 @@
 data/raw/
 
 *.egg-info/
+__pycache__/
+*.pyc
