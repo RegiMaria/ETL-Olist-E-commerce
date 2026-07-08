@@ -56,3 +56,10 @@ class ExtractorFactory:
             return extractor_class()
 
         return extractor_class(filepath)
+
+# Comentario pedagogico
+# Antes OCP: um método gigante decidindo comportamento por tipo.
+# Depois OCP: várias classes, cada uma resolvendo seu próprio comportamento.
+# Factory: a peça que decide qual dessas classes instanciar, centralizando
+# essa decisão num único lugar (ao invés de espalhar if/elif 
+# pelo código que consome os extractors).
