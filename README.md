@@ -1,148 +1,270 @@
-# Olist ETL - Estudo de Princípios SOLID
+# etl-olist-ecommerce
 
-Projeto de estudo prático dos princípios SOLID (SRP e OCP) aplicados a um pipeline
-ETL em Python, usando o dataset público **Brazilian E-Commerce by Olist**
-(Kaggle).
+Projeto de estudo aplicado sobre os princípios **SOLID**, usando como
+contexto prático um extrator de dados do [dataset público da Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
+(e-commerce brasileiro).
 
-O objetivo não é construir um pipeline de produção, e sim demonstrar de forma
-didática:
+> **Aviso de escopo:** apesar do nome, este projeto **não** implementa
+> um pipeline de ETL completo (Extract-Transform-Load). O foco é
+> estudar, na prática, como um princípio de design de software (o OCP)
+> se manifesta em código real - usando a etapa de *Extract* como
+> estudo de caso. Transform e Load podem vir depois, mas não são o
+> objetivo principal aqui.
 
-1. Como aplicar o **SRP (Single Responsibility Principle)** desde o início,
-   separando claramente extração, transformação e carga.
-2. Como uma implementação inicial pode **violar o OCP (Open/Closed Principle)**
-   mesmo respeitando o SRP.
-3. Como refatorar essa implementação para respeitar o OCP, usando abstrações
-   (classes abstratas / interfaces) que permitem estender o pipeline sem
-   modificar código existente.
+## Objetivo
 
-## OCP é o Open/Closed Principle - o "O" do SOLID. A ideia central:
+Comparar duas versões de uma mesma classe `Extractor`, responsável por
+ler dados de diferentes origens (CSV, Parquet, JSON, API simulada):
 
-> Uma entidade de software (classe, módulo, função) deve estar aberta para extensão, mas fechada para modificação.
+1. **Antes do OCP** - respeita o SRP, mas viola o OCP.
+2. **Depois do OCP** - respeita SRP *e* OCP, com uma *Factory* para
+   centralizar a escolha do extractor certo.
 
-Ou seja: quando você precisa adicionar um comportamento novo, você deve conseguir fazer isso criando código novo, sem precisar alterar o código que já existe e já está testado/funcionando.
+A ideia é tornar tangível a diferença entre "só funciona" e "está bem
+projetado", e mostrar o motivo prático por trás do princípio, não só a
+definição de livro.
 
-Por que isso importa?
-Toda vez que você modifica uma classe que já está em produção, você corre o risco de quebrar algo que já funcionava. O OCP existe pra reduzir esse risco: se o comportamento novo entra por extensão (uma classe nova implementando uma interface), o código antigo nunca é tocado, logo, nunca quebra.
+## Os princípios que vamos trabalhar
 
-## Sobre o dataset
+### SRP - Single Responsibility Principle
 
-**Brazilian E-Commerce Public Dataset by Olist**
-Fonte: [kaggle.com/datasets/olistbr/brazilian-ecommerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
+> Uma classe deve ter um, e somente um, motivo para mudar.
 
-Conjunto de ~9 arquivos CSV com dados reais (anonimizados) de pedidos de um
-marketplace brasileiro entre 2016 e 2018: pedidos, itens, clientes, produtos,
-pagamentos, avaliações, vendedores e geolocalização.
+Nas duas versões do `Extractor`, o SRP é respeitado: a única
+responsabilidade da classe é extrair dados de uma origem. Ela não
+transforma dados, não valida regras de negócio, não salva nada, só
+extrai.
 
-Principais arquivos:
+### OCP - Open/Closed Principle
 
-| Arquivo | Descrição |
-|---|---|
-| `olist_orders_dataset.csv` | Pedidos e seus status/datas |
-| `olist_order_items_dataset.csv` | Itens de cada pedido |
-| `olist_customers_dataset.csv` | Clientes |
-| `olist_products_dataset.csv` | Produtos |
-| `olist_order_payments_dataset.csv` | Pagamentos |
-| `olist_order_reviews_dataset.csv` | Avaliações |
-| `olist_sellers_dataset.csv` | Vendedores |
-| `olist_geolocation_dataset.csv` | Geolocalização por CEP |
-| `product_category_name_translation.csv` | Tradução de categorias PT → EN |
+> Entidades de software devem estar abertas para extensão, mas
+> fechadas para modificação.
 
-> Os arquivos originais **não são versionados** neste repositório. Baixe-os do
-> Kaggle e coloque em `data/raw/` (veja [Como rodar](#como-rodar)).🌻
+É aqui que as duas versões divergem.🧚🏾‍♀️
 
-## Arquitetura
+## Versão 1: "antes OCP"
 
-Pipeline ETL organizado em camadas **Bronze → Silver → Gold** (medallion
-architecture), com responsabilidades bem separadas:
+📁 `src/olist_etl/extractors/extractor.py`
 
-```
-olist-etl/
-├── data/
-│   ├── raw/              # CSVs originais do Kaggle (não versionado)
-│   ├── bronze/           # dados brutos ingeridos, sem transformação
-│   ├── silver/           # dados limpos e padronizados
-│   └── gold/             # dados agregados, prontos para consumo/análise
-├── notebooks/
-│   └── 01_eda.ipynb      # análise exploratória inicial
-├── src/
-│   └── olist_etl/
-│       ├── extractors/   # responsáveis por extrair dados de uma origem
-│       ├── transformers/ # responsáveis por transformar dados (bronze/silver/gold)
-│       ├── loaders/      # responsáveis por carregar dados em um destino
-│       └── pipeline.py   # orquestra extract → transform → load
-├── tests/
-├── pyproject.toml
-└── README.md
+Uma única classe `Extractor`, com um único método `extract()`, que usa
+uma cadeia de `if/elif` para decidir o comportamento com base no tipo
+de fonte:
+
+```python
+class Extractor:
+    def extract(self, source_type: str, filepath: str = None) -> pd.DataFrame:
+        if source_type == "csv":
+            return pd.read_csv(filepath)
+        elif source_type == "parquet":
+            return pd.read_parquet(filepath)
+        elif source_type == "json":
+            return pd.read_json(filepath)
+        elif source_type == "api":
+            dados_fake = {"id": [1, 2], "valor": [100, 200]}
+            return pd.DataFrame(dados_fake)
+        else:
+            raise ValueError(f"Tipo de fonte nao suportado: {source_type}")
 ```
 
-### SRP (Single Responsibility Principle)
+**Problema:** toda vez que uma fonte nova precisa ser suportada, é
+necessário **modificar** o método `extract()` já existente, adicionando
+mais um `elif`. Isso violou o OCP na prática, quando adicionamos a
+fonte `"api"`: precisamos editar uma classe já pronta e já testada,
+com risco de quebrar o que já funcionava.
 
-Cada classe tem uma única responsabilidade:
+Além disso, esse processo revelou um segundo problema de design: o
+parâmetro `filepath` faz sentido para `csv`/`parquet`/`json`, mas é
+inútil para `api` — um sintoma de que o método está tentando fazer
+coisas demais dentro de uma única assinatura (um cheiro de código
+relacionado ao Interface Segregation Principle, o "I" do SOLID).
 
-A ser criado
+## Versão 2: "depois OCP"
 
-### OCP (Open/Closed Principle)
+📁 `src/olist_etl/extractors/`
 
-A ser criado
-
-## Como rodar
-
-### 1. Pré-requisitos
-
-- Python 3.11+
-- [Kaggle API](https://github.com/Kaggle/kaggle-api) configurada (opcional,
-  para baixar o dataset via linha de comando) ou download manual pelo site.
-
-### 2. Instalar dependências
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .
+```
+extractors/
+├── base.py               # BaseExtractor (interface abstrata)
+├── csv_extractor.py       # CsvExtractor
+├── parquet_extractor.py   # ParquetExtractor
+├── json_extractor.py      # JsonExtractor
+├── api_extractor.py       # ApiExtractor
+└── factory.py             # ExtractorFactory
 ```
 
-### 3. Baixar o dataset
+Cada fonte de dados vira uma classe própria, que implementa a
+interface `BaseExtractor`:
 
-Opção A - via Kaggle API:
+```python
+class BaseExtractor(ABC):
+    @abstractmethod
+    def extract(self) -> pd.DataFrame:
+        ...
 
-```bash
-kaggle datasets download -d olistbr/brazilian-ecommerce -p data/raw --unzip
+
+class CsvExtractor(BaseExtractor):
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+
+    def extract(self) -> pd.DataFrame:
+        return pd.read_csv(self.filepath)
+
+
+class ApiExtractor(BaseExtractor):
+    def extract(self) -> pd.DataFrame:
+        dados_fake = {"id": [1, 2], "valor": [100, 200]}
+        return pd.DataFrame(dados_fake)
 ```
 
-Opção B — manual: baixe o `.zip` em
-[kaggle.com/datasets/olistbr/brazilian-ecommerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
-e extraia o conteúdo em `data/raw/`.
+**Resultado:** adicionar uma fonte nova significa **criar um arquivo
+novo** implementando `BaseExtractor`, sem tocar em nenhum arquivo já
+existente. O sistema fica aberto para extensão e fechado para
+modificação, o OCP na prática.
 
-### 4. Rodar a EDA
+Como bônus, o segundo problema também desaparece: cada classe concreta
+só tem os parâmetros que realmente faz sentido para ela (`ApiExtractor`
+nem precisa de `filepath`).
 
-```bash
-jupyter notebook notebooks/01_eda.ipynb # Colocar nome
+## A ExtractorFactory
+
+### O problema que a Factory resolve
+
+Ter várias classes (`CsvExtractor`, `ParquetExtractor`, `ApiExtractor`...)
+resolve o problema *dentro* de cada extractor, mas cria uma pergunta
+nova: **quem decide qual classe instanciar?**
+
+Sem uma resposta pra isso, o código que consome os extractors acabaria
+assim:
+
+```python
+if tipo == "csv":
+    extractor = CsvExtractor(caminho)
+elif tipo == "parquet":
+    extractor = ParquetExtractor(caminho)
+elif tipo == "api":
+    extractor = ApiExtractor()
 ```
 
-### 5. Rodar o pipeline ETL
+Ou seja: o `if/elif` que tirei de dentro do `Extractor.extract()`
+simplesmente **migrou** para outro lugar do código (um `main.py`, um
+`pipeline.py`). A violação do OCP não desapareceu, só mudou de
+endereço.
 
-```bash
-python -m olist_etl.pipeline
+### O que é a Factory
+
+**Factory** (fábrica) é um padrão de projeto cuja única
+responsabilidade é: dado um tipo de fonte, devolver a instância certa
+da classe certa. Ela concentra essa decisão em um único lugar, ao invés
+de espalhar `if/elif` por todo o código que precisa de um extractor.
+
+```python
+class ExtractorFactory:
+    _extractors = {
+        "csv": CsvExtractor,
+        "parquet": ParquetExtractor,
+        "json": JsonExtractor,
+        "api": ApiExtractor,
+    }
+
+    _sem_filepath = {"api"}
+
+    @classmethod
+    def create(cls, source_type: str, filepath: str = None) -> BaseExtractor:
+        extractor_class = cls._extractors.get(source_type)
+
+        if extractor_class is None:
+            raise ValueError(f"Tipo de fonte nao suportado: {source_type}")
+
+        if source_type in cls._sem_filepath:
+            return extractor_class()
+
+        return extractor_class(filepath)
 ```
+
+Uso:
+
+```python
+extractor = ExtractorFactory.create("csv", "data/raw/pedidos.csv")
+df = extractor.extract()
+```
+
+Quem consome a Factory não precisa saber qual classe concreta veio de
+volta, só que ela cumpre o contrato de `BaseExtractor` (tem um
+`.extract()`). Isso é polimorfismo em ação.
+
+> **Nota:** a Factory ainda tem um `if` internamente
+> (`_sem_filepath`). Isso não é uma violação do OCP — é o mapeamento
+> mínimo necessário para traduzir uma string em uma classe. O ganho
+> real do OCP aqui é que esse `if` fica isolado em **um único lugar**,
+> e adicionar uma fonte nova não exige tocar nas classes de extração
+> já existentes.
+
+## Resumo
+
+* **Antes OCP:** um método gigante decidindo comportamento por tipo.
+* **Depois OCP:** várias classes, cada uma resolvendo seu próprio
+  comportamento.
+* **Factory:** a peça que decide qual dessas classes instanciar,
+  centralizando essa decisão num único lugar (ao invés de espalhar
+  `if/elif` pelo código que consome os extractors).
+
+## Comparação rápida
+
+| | Antes OCP | Depois OCP |
+|---|---|---|
+| SRP respeitado? | ✅ | ✅ |
+| OCP respeitado? | ❌ | ✅ |
+| Adicionar fonte nova | Editar método existente | Criar arquivo novo + registrar na Factory |
+| Parâmetros "que não se aplicam" | Sim (`filepath` em `api`) | Não |
+| Risco ao adicionar fonte | Quebrar fontes já testadas | Nenhum (isolado) |
+| Quem decide qual classe usar | N/A (é uma classe só) | `ExtractorFactory` |
 
 ## Testes
 
 ```bash
-pytest tests/
+pytest tests/ -v
 ```
 
-## Roadmap de estudo
+- `tests/test_extractor.py` - cobre a versão "antes OCP"
+- `tests/test_csv_extractor.py` - `CsvExtractor`
+- `tests/test_parquet_extractor.py` - `ParquetExtractor`
+- `tests/test_json_extractor.py` - `JsonExtractor`
+- `tests/test_api_extractor.py` - `ApiExtractor`
+- `tests/test_factory.py` - `ExtractorFactory`
 
-- [ ] Setup do projeto e organização em camadas bronze/silver/gold
-- [ ] EDA inicial do dataset Olist
-- [ ] Pipeline "antes OCP" (SRP aplicado, OCP violado)
-- [ ] Pipeline "depois OCP" (abstrações e extensibilidade)
-- [ ] Aplicação do Liskov Substitution Principle (LSP)
-- [ ] Aplicação do Interface Segregation Principle (ISP)
-- [ ] Aplicação do Dependency Inversion Principle (DIP)
+## Estrutura do projeto
 
-## Licença dos dados
+```
+etl-olist-ecommerce/
+├── src/
+│   └── olist_etl/
+│       └── extractors/
+│           ├── extractor.py          # versao "antes OCP"
+│           ├── base.py               # versao "depois OCP"
+│           ├── csv_extractor.py
+│           ├── parquet_extractor.py
+│           ├── json_extractor.py
+│           ├── api_extractor.py
+│           └── factory.py            # ExtractorFactory
+├── tests/
+│   ├── test_extractor.py
+│   ├── test_csv_extractor.py
+│   ├── test_parquet_extractor.py
+│   ├── test_json_extractor.py
+│   ├── test_api_extractor.py
+│   └── test_factory.py
+└── data/
+    └── raw/                          # dataset da Olist (nao versionado)
+```
 
-O dataset é disponibilizado pela Olist sob licença [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/),
-para uso não comercial. Este projeto é de finalidade exclusivamente
-educacional.
+## Próximos passos possíveis
+
+- [ ] Documentar outros princípios SOLID (LSP, ISP, DIP) usando o
+      mesmo estudo de caso.
+- [ ] (Opcional, fora do escopo principal) Etapas de Transform e Load.
+
+## Referências
+
+- Robert C. Martin, *Clean Architecture* - capítulo sobre OCP.
+
+- [Dataset Olist Brazilian E-Commerce (Kaggle)](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
